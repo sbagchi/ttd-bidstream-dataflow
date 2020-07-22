@@ -8,13 +8,18 @@ import org.apache.avro.generic.GenericRecord;
 import org.apache.avro.reflect.ReflectData;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.coders.AvroCoder;
+import org.apache.beam.sdk.io.AvroIO;
+import org.apache.beam.sdk.io.FileBasedSink;
 import org.apache.beam.sdk.io.FileIO;
 import org.apache.beam.sdk.io.FileSystems;
 import org.apache.beam.sdk.io.fs.MatchResult;
 import org.apache.beam.sdk.io.fs.MatchResult.Metadata;
+import org.apache.beam.sdk.io.fs.ResourceId;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
+import org.apache.beam.sdk.options.ValueProvider.NestedValueProvider;
 import org.apache.beam.sdk.transforms.PTransform;
 import org.apache.beam.sdk.transforms.ParDo;
+import org.apache.beam.sdk.transforms.SerializableFunction;
 import org.apache.beam.sdk.transforms.windowing.AfterProcessingTime;
 import org.apache.beam.sdk.transforms.windowing.AfterWatermark;
 import org.apache.beam.sdk.transforms.windowing.FixedWindows;
@@ -47,7 +52,7 @@ public class BidstreamProcessingPipeline {
      * Number of shards during file writing, a value of zero means system determines the number of files.
      * Zero is chosen for better performance.
      */
-    protected static int NUM_WRITE_SHARDS = 0;
+    protected static int NUM_WRITE_SHARDS = 50;
 
     protected static int THROTTLE_PERCENTAGE = 5;
 
@@ -86,15 +91,32 @@ public class BidstreamProcessingPipeline {
                 //.apply("Apply hourly partitioning", Window.into(FixedWindows.of(Duration.standardMinutes(DEFAULT_WINDOW_SIZE_IN_MINS))))
                 //.apply("Reshuffle via random key", Reshuffle.viaRandomKey())
                 .apply("Convert to Avro record", ParDo.of(new AvailsToAvroConverter(ipAddressBytesParser, uuidBytesParser, transactionIdGenerator, clock)))
-                .apply("Convert to generic record", ParDo.of(new BidRecordToGenericRecordConverter()))
-                .setCoder(AvroCoder.of(GenericRecord.class, schema))
-                .apply("apply windowing", getWindow())
-                .apply("WriteToParquet", ParquetWriter.getTransform(schema, options.getOutput(), NUM_WRITE_SHARDS));
+                //.apply("Convert to generic record", ParDo.of(new BidRecordToGenericRecordConverter()))
+                //.setCoder(AvroCoder.of(GenericRecord.class, schema))
+                //.apply("apply windowing", getWindow())
+                .apply("Apply hourly partitioning", Window.into(FixedWindows.of(Duration.standardMinutes(DEFAULT_WINDOW_SIZE_IN_MINS))))
+                //.apply("WriteToParquet", ParquetWriter.getTransform(schema, options.getOutput(), NUM_WRITE_SHARDS));
+                .apply(
+                        "Write File(s)",
+                        AvroIO.write(BidRecord.class)
+                                .to(
+                                        new WindowedFilenamePolicy(
+                                                options.getOutput().get(),
+                                                "output",
+                                                "W-P-SS-of-NN",
+                                                ".avro"))
+                                .withTempDirectory(NestedValueProvider.of(
+                                        options.getAvroTempDirectory(),
+                                        (SerializableFunction<String, ResourceId>) x ->
+                                                FileBasedSink.convertToFileResourceIfPossible(x)))
+                                .withWindowedWrites()
+                                .withOutputFilenames()
+                                .withNumShards(NUM_WRITE_SHARDS));
         pipeline.run();
     }
 
-    private static Window<GenericRecord> getWindow() {
-        return Window.<GenericRecord>into(FixedWindows.of(Duration.standardMinutes(DEFAULT_WINDOW_SIZE_IN_MINS)))
+    private static Window<BidRecord> getWindow() {
+        return Window.<BidRecord>into(FixedWindows.of(Duration.standardMinutes(DEFAULT_WINDOW_SIZE_IN_MINS)))
                 .triggering(Repeatedly.forever(AfterWatermark.pastEndOfWindow()))
                 .discardingFiredPanes()
                 .withAllowedLateness(Duration.ZERO);

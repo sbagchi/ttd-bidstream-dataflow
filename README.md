@@ -22,19 +22,31 @@ gsutil mb -c standard -l ${REGION} gs://dataproc-ttd-bid-staging
 
 ### run dataflow job (ETL pipeline)
 use numshards 0 to automatically scale
-mvn -Denforcer.skip=true compile exec:java -Dexec.mainClass=com.dstillery.dataflow.bidstream.ttd.BidstreamProcessingPipeline       -Dexec.args="--project=dataflow-quick-start-275217 \
-      --inputFile=gs://dataflow-ttd-bid-input/*.log.gz \
-      --output=gs://dataflow-ttd-bid-output/data \
-      --jobName=bidstream-pipeline \
-      --useGcsSource=false
-      --runner=DataflowRunner" -Pdataflow-runner  
+mvn -Denforcer.skip=true compile exec:java \
+-Dexec.mainClass=com.dstillery.dataflow.bidstream.ttd.BidstreamProcessingPipeline \
+-Dexec.args=" \
+--jobName=bidstream-pipeline2 \
+--project=dst-datawarehouse \
+--region=us-central1 \
+--experiments=shuffle_mode=service \
+--runner=DataflowRunner \
+--useGcsSource=false \
+--workerMachineType=n1-highmem-4 \
+--numWorkers=5 \
+--maxNumWorkers=100 \
+--inputFile=gs://dst-ttd-bidstream-raw/2020/07/01/00/*.log.gz \
+--output=gs://dst-dataflow-output2/output/YYYY-MM-DD \
+--stagingLocation=gs://dst-dataflow-output2/staging \
+--avroTempDirectory=gs://dst-dataflow-output2/temp" \
+-Pdataflow-runner  
 
 # run locally with TTD files     
 mvn clean compile exec:java \
       -Dlog4j.configuration=file:./examples/log4j.xml \
       -Dexec.mainClass=com.dstillery.dataflow.bidstream.ttd.BidstreamProcessingPipeline \
       -Dexec.args="--inputFile=examples/sample*.log.gz \
-      --output=target/output \
+      --output=target/output/YYYY-MM-DD \
+      --avroTempDirectory=target/output \
       --useGcsSource=false " -Pdirect-runner 
       
 # inspect local file

@@ -68,7 +68,8 @@ public class TTDFileParser extends PTransform<PCollection<ReadableFile>, PCollec
                         LOGGER.error("TTD Protobuf Record failed to parse, file {}",
                                 element.getMetadata().resourceId().getFilename(), e);
                         unParsedRecords.inc();
-                        continue;
+                        failedFiles.inc();
+                        return;
                     }
                     parsedRecords.inc();
 

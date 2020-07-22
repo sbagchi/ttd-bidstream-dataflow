@@ -4,6 +4,7 @@ import org.apache.beam.sdk.options.Default;
 import org.apache.beam.sdk.options.Description;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.Validation;
+import org.apache.beam.sdk.options.Validation.Required;
 import org.apache.beam.sdk.options.ValueProvider;
 
 public interface ProcessingOptions extends PipelineOptions {
@@ -45,4 +46,10 @@ public interface ProcessingOptions extends PipelineOptions {
     @Default.Boolean(true)
     ValueProvider<Boolean> getUseGcsSource();
     void setUseGcsSource(ValueProvider<Boolean> flag);
+
+    @Description("The Avro Write Temporary Directory. Must end with /")
+    @Required
+    ValueProvider<String> getAvroTempDirectory();
+
+    void setAvroTempDirectory(ValueProvider<String> value);
 }
